@@ -2,7 +2,7 @@
   "name": "Anggaran Bulanan",
   "short_name": "Anggaran",
   "description": "Aplikasi pencatatan keuangan dan anggaran bulanan pribadi",
-  "start_url": "/index/",
+  "start_url": "/keuangan/",
   "scope": "/keungan/",
   "display": "standalone",
   "orientation": "portrait",
