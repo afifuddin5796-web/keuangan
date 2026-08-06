@@ -993,7 +993,14 @@ function deleteHistory(id){
   }
 }
 
-checkSetup();
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js')
+      .then(reg => console.log('Service Worker terdaftar:', reg))
+      .catch(err => console.error('Gagal mendaftar Service Worker:', err));
+  });
+}
+  checkSetup();
 </script>
 </body>
 </html>
