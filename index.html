@@ -311,7 +311,12 @@
   <div class="reset-row">
     <button onclick="resetBulan()">🔄 Tutup bulan ini & simpan ke History</button>
   </div>
-  <div class="note">Data tersimpan otomatis di perangkat ini.</div>
+  <div class="reset-row" style="display:flex; gap:8px; margin-top:10px;">
+    <button style="flex:1;" onclick="backupData()">💾 Backup Data</button>
+    <button style="flex:1;" onclick="document.getElementById('importFile').click()">📂 Impor Data</button>
+  </div>
+  <input type="file" id="importFile" accept="application/json,.json" style="display:none" onchange="importData(event)">
+  <div class="note">Data tersimpan otomatis di perangkat ini. Backup rutin disarankan sebelum ganti HP atau hapus data browser.</div>
 </div>
 
 <!-- PAGE: HISTORY -->
@@ -486,6 +491,80 @@ function loadData(){
   return JSON.parse(JSON.stringify(defaultData));
 }
 function saveData(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
+
+/* === BACKUP & IMPOR === */
+function backupData(){
+  try{
+    const exportObj = {
+      _app: 'anggaran-bulanan',
+      _storageKey: STORAGE_KEY,
+      _exportedAt: new Date().toISOString(),
+      data: data
+    };
+    const blob = new Blob([JSON.stringify(exportObj, null, 2)], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const tanggal = new Date().toISOString().slice(0,10);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `backup-anggaran-${tanggal}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(()=>URL.revokeObjectURL(url), 2000);
+  }catch(e){
+    alert('Gagal membuat backup: '+e.message);
+  }
+}
+
+function importData(event){
+  const file = event.target.files && event.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e){
+    try{
+      const parsed = JSON.parse(e.target.result);
+      const incoming = (parsed && typeof parsed==='object' && parsed.data) ? parsed.data : parsed;
+
+      if(!incoming || typeof incoming!=='object' || !Array.isArray(incoming.wajib)){
+        alert('File ini bukan file backup Anggaran Bulanan yang valid.');
+        return;
+      }
+
+      const konfirmasi = confirm(
+        'Impor data ini akan MENGGANTI seluruh data yang tersimpan saat ini di HP ini.\n\n'+
+        'Kalau data saat ini masih dibutuhkan, backup dulu sebelum lanjut.\n\n'+
+        'Lanjutkan impor?'
+      );
+      if(!konfirmasi) return;
+
+      incoming.profil = incoming.profil || {...defaultProfil};
+      incoming.income = incoming.income || [];
+      incoming.history = incoming.history || [];
+      incoming.reminders = incoming.reminders || [];
+      incoming.carryOver = incoming.carryOver || 0;
+      incoming.bulanAktif = incoming.bulanAktif || bulanSekarang();
+      incoming.gaji = incoming.gaji || 0;
+      incoming.setupDone = true;
+      incoming.wajib = (incoming.wajib||[]).map(i=>({...i, logs:i.logs||[]}));
+      incoming.custom = (incoming.custom||[]).map(i=>({...i, logs:i.logs||[]}));
+
+      data = incoming;
+      saveData();
+      checkSetup();
+      render();
+      alert('Impor berhasil! Data sudah dipulihkan.');
+    }catch(err){
+      alert('Gagal membaca file backup. Pastikan file .json valid.\n\n'+err.message);
+    }finally{
+      event.target.value = '';
+    }
+  };
+  reader.onerror = function(){
+    alert('Gagal membaca file.');
+    event.target.value = '';
+  };
+  reader.readAsText(file);
+}
 
 let data = loadData();
 let editingId = null, editingType = null;
@@ -999,6 +1078,11 @@ if ('serviceWorker' in navigator) {
       .then(reg => console.log('Service Worker terdaftar:', reg))
       .catch(err => console.error('Gagal mendaftar Service Worker:', err));
   });
+}
+// Minta browser untuk tidak sembarangan menghapus cache/data app ini
+// saat storage HP penuh — supaya mode offline lebih awet.
+if (navigator.storage && navigator.storage.persist) {
+  navigator.storage.persist().catch(() => {});
 }
   checkSetup();
 </script>
