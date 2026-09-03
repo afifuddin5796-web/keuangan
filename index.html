@@ -67,9 +67,9 @@
     color:var(--accent); cursor:pointer; margin-top:8px;
   }
   .bulan-badge span{font-size:10px; opacity:.7;}
-  .tabs{display:flex; gap:4px; margin-top:10px;}
+  .tabs{display:flex; gap:4px; margin-top:10px; overflow-x:auto;}
   .tab{flex:1; text-align:center; padding:10px 4px; font-size:13px; font-weight:700;
-    color:var(--sub); border-bottom:2px solid transparent; cursor:pointer;}
+    color:var(--sub); border-bottom:2px solid transparent; cursor:pointer; white-space:nowrap;}
   .tab.active{color:var(--accent); border-bottom-color:var(--accent);}
 
   /* PAGE */
@@ -213,6 +213,19 @@
   .cal-btn.google{background:#4285F4; color:white;}
   .cal-btn.ics{background:var(--card2); color:var(--text); border:1px solid var(--line);}
   .cal-separator{text-align:center; font-size:12px; color:var(--sub); margin:8px 0;}
+
+  /* GRAFIK */
+  .chart-card{margin:14px 14px 0; background:var(--card); border:1px solid var(--line); border-radius:16px; padding:16px;}
+  .chart-title{font-size:13.5px; font-weight:700; margin-bottom:2px;}
+  .chart-subtitle{font-size:11.5px; color:var(--sub); margin-bottom:12px;}
+  .chart-legend{display:flex; gap:16px; margin-top:10px; justify-content:center; flex-wrap:wrap;}
+  .chart-legend-item{display:flex; align-items:center; gap:6px; font-size:11.5px; color:var(--sub);}
+  .chart-legend-dot{width:9px; height:9px; border-radius:3px; flex-shrink:0;}
+  .chart-empty{font-size:13px; color:var(--sub); text-align:center; padding:24px 8px;}
+  .chart-toggle{display:flex; gap:6px; margin:0 14px 4px;}
+  .chart-toggle button{flex:1; background:var(--card); border:1px solid var(--line); color:var(--sub);
+    padding:9px; border-radius:10px; font-size:12px; font-weight:700;}
+  .chart-toggle button.active{background:var(--accent); color:#06281f; border-color:var(--accent);}
 </style>
 </head>
 <body>
@@ -250,6 +263,7 @@
   </div>
   <div class="tabs">
     <div class="tab active" id="tabNow" onclick="switchTab('now')">Bulan Ini</div>
+    <div class="tab" id="tabGrafik" onclick="switchTab('grafik')">📊 Grafik</div>
     <div class="tab" id="tabHist" onclick="switchTab('hist')">History</div>
     <div class="tab" id="tabRemind" onclick="switchTab('remind')">🔔 Ingat</div>
   </div>
@@ -317,6 +331,28 @@
   </div>
   <input type="file" id="importFile" accept="application/json,.json" style="display:none" onchange="importData(event)">
   <div class="note">Data tersimpan otomatis di perangkat ini. Backup rutin disarankan sebelum ganti HP atau hapus data browser.</div>
+</div>
+
+<!-- PAGE: GRAFIK -->
+<div class="page" id="pageGrafik">
+  <div class="section-title" style="margin-top:20px;">📊 Tren Pemasukan vs Pengeluaran</div>
+  <div class="chart-card">
+    <div class="chart-title">6 Bulan Terakhir</div>
+    <div class="chart-subtitle">Termasuk bulan berjalan yang belum ditutup</div>
+    <div id="trendChartWrap"></div>
+  </div>
+
+  <div class="section-title">🧩 Breakdown Pos Bulan Ini</div>
+  <div class="chart-toggle">
+    <button id="breakdownBtnWajib" class="active" onclick="setBreakdownMode('wajib')">Pos Wajib</button>
+    <button id="breakdownBtnCustom" onclick="setBreakdownMode('custom')">Pos Tambahan</button>
+    <button id="breakdownBtnAll" onclick="setBreakdownMode('all')">Semua</button>
+  </div>
+  <div class="chart-card">
+    <div class="chart-title" id="breakdownTitle">Pos Wajib</div>
+    <div class="chart-subtitle">Jumlah terpakai per pos, bulan <span id="breakdownBulanLabel">-</span></div>
+    <div id="breakdownChartWrap"></div>
+  </div>
 </div>
 
 <!-- PAGE: HISTORY -->
@@ -568,10 +604,19 @@ function importData(event){
 
 let data = loadData();
 let editingId = null, editingType = null;
+let breakdownMode = 'wajib';
 
 function formatRp(n){
   n = Math.round(Number(n)||0);
   return 'Rp' + n.toLocaleString('id-ID');
+}
+function formatRpShort(n){
+  n = Math.round(Number(n)||0);
+  const abs = Math.abs(n);
+  if(abs>=1000000000) return (n/1000000000).toFixed(1).replace(/\.0$/,'')+'M';
+  if(abs>=1000000) return (n/1000000).toFixed(1).replace(/\.0$/,'')+'jt';
+  if(abs>=1000) return (n/1000).toFixed(0)+'rb';
+  return String(n);
 }
 function escapeHtml(s){
   const d = document.createElement('div');
@@ -651,12 +696,13 @@ function saveCarry(){
 
 /* === TABS === */
 function switchTab(tab){
-  ['now','hist','remind'].forEach(t=>{
+  ['now','grafik','hist','remind'].forEach(t=>{
     document.getElementById('tab'+t.charAt(0).toUpperCase()+t.slice(1))?.classList.toggle('active', t===tab);
     document.getElementById('page'+t.charAt(0).toUpperCase()+t.slice(1))?.classList.toggle('active', t===tab);
   });
   if(tab==='hist') renderHistory();
   if(tab==='remind') renderReminders();
+  if(tab==='grafik') renderGrafik();
 }
 
 /* === PENGINGAT === */
@@ -776,6 +822,11 @@ function calcTotals(){
   });
   return {tambahan, totalMasuk, terpakai, sisa: totalMasuk - terpakai};
 }
+function itemSpent(item){
+  const lt = logTotal(item);
+  if(lt!==null) return lt;
+  return item.done ? (Number(item.amount)||0) : 0;
+}
 
 /* === RENDER === */
 function render(){
@@ -829,6 +880,9 @@ function render(){
   bar.style.width = pct+'%';
   bar.classList.toggle('over', t.sisa<0);
   document.getElementById('pctText').textContent = pct+'% dari pos wajib sudah dicentang ('+doneWajib+'/'+data.wajib.length+')';
+
+  const grafikPage = document.getElementById('pageGrafik');
+  if(grafikPage && grafikPage.classList.contains('active')) renderGrafik();
 }
 
 function renderItem(item, type, isIncome){
@@ -867,6 +921,128 @@ function renderItem(item, type, isIncome){
   div.querySelector('.item-body').onclick = ()=>openModal(item.id, type);
   div.querySelector('.item-edit').onclick = e=>{ e.stopPropagation(); openModal(item.id, type); };
   return div;
+}
+
+/* === GRAFIK === */
+function setBreakdownMode(mode){
+  breakdownMode = mode;
+  ['Wajib','Custom','All'].forEach(m=>{
+    document.getElementById('breakdownBtn'+m).classList.toggle('active', m.toLowerCase()===mode);
+  });
+  renderBreakdownChart();
+}
+
+function renderGrafik(){
+  renderTrendChart();
+  document.getElementById('breakdownBulanLabel').textContent = data.bulanAktif || bulanSekarang();
+  renderBreakdownChart();
+}
+
+function renderTrendChart(){
+  const wrap = document.getElementById('trendChartWrap');
+  // Ambil sampai 5 history terlama->terbaru + bulan berjalan (belum ditutup)
+  const histAsc = [...data.history].slice(0,5).reverse(); // history[0] = terbaru, ambil 5 terbaru lalu balik urutan jadi lama->baru
+  const t = calcTotals();
+  const points = histAsc.map(r=>({
+    label: r.label,
+    income: r.totalMasuk,
+    expense: r.terpakai
+  }));
+  points.push({
+    label: (data.bulanAktif||bulanSekarang())+' (skrg)',
+    income: t.totalMasuk,
+    expense: t.terpakai
+  });
+
+  if(points.length<=1 && points[0].income===0 && points[0].expense===0){
+    wrap.innerHTML = '<div class="chart-empty">Belum ada data. Grafik akan muncul setelah kamu isi gaji/pengeluaran atau menutup bulan pertama.</div>';
+    return;
+  }
+
+  const W = 320, Hc = 190, padL = 8, padR = 8, padT = 10, padB = 34;
+  const chartW = W - padL - padR;
+  const chartH = Hc - padT - padB;
+  const n = points.length;
+  const groupW = chartW / n;
+  const barW = Math.min(16, groupW/2.6);
+  const maxVal = Math.max(1, ...points.map(p=>Math.max(p.income,p.expense)));
+
+  let bars = '';
+  let labels = '';
+  points.forEach((p,i)=>{
+    const groupX = padL + i*groupW;
+    const cx = groupX + groupW/2;
+    const hInc = (p.income/maxVal)*chartH;
+    const hExp = (p.expense/maxVal)*chartH;
+    const yInc = padT + (chartH - hInc);
+    const yExp = padT + (chartH - hExp);
+    const x1 = cx - barW - 2;
+    const x2 = cx + 2;
+    bars += `<rect x="${x1}" y="${yInc}" width="${barW}" height="${Math.max(hInc,1)}" rx="3" fill="var(--plus)"><title>${escapeHtml(p.label)} · Pemasukan: ${formatRp(p.income)}</title></rect>`;
+    bars += `<rect x="${x2}" y="${yExp}" width="${barW}" height="${Math.max(hExp,1)}" rx="3" fill="var(--accent2)"><title>${escapeHtml(p.label)} · Pengeluaran: ${formatRp(p.expense)}</title></rect>`;
+    if(p.income>0) bars += `<text x="${x1+barW/2}" y="${yInc-4}" text-anchor="middle" font-size="8.5" fill="var(--plus)">${formatRpShort(p.income)}</text>`;
+    if(p.expense>0) bars += `<text x="${x2+barW/2}" y="${yExp-4}" text-anchor="middle" font-size="8.5" fill="var(--accent2)">${formatRpShort(p.expense)}</text>`;
+    const shortLabel = p.label.length>10 ? p.label.split(' ')[0].slice(0,3)+(p.label.includes('(skrg)')?'*':'') : p.label;
+    labels += `<text x="${cx}" y="${Hc-16}" text-anchor="middle" font-size="9.5" fill="var(--sub)">${escapeHtml(shortLabel)}</text>`;
+  });
+
+  const zeroY = padT + chartH;
+  const svg = `
+  <svg viewBox="0 0 ${W} ${Hc}" width="100%" style="display:block;">
+    <line x1="${padL}" y1="${zeroY}" x2="${W-padR}" y2="${zeroY}" stroke="var(--line)" stroke-width="1"/>
+    ${bars}
+    ${labels}
+  </svg>`;
+  wrap.innerHTML = svg;
+
+  const legendDiv = document.createElement('div');
+  legendDiv.className = 'chart-legend';
+  legendDiv.innerHTML = `
+    <div class="chart-legend-item"><span class="chart-legend-dot" style="background:var(--plus)"></span>Pemasukan</div>
+    <div class="chart-legend-item"><span class="chart-legend-dot" style="background:var(--accent2)"></span>Pengeluaran</div>
+  `;
+  wrap.appendChild(legendDiv);
+}
+
+function renderBreakdownChart(){
+  const wrap = document.getElementById('breakdownChartWrap');
+  const titleEl = document.getElementById('breakdownTitle');
+  let items = [];
+  if(breakdownMode==='wajib'){ items = data.wajib; titleEl.textContent = 'Pos Wajib'; }
+  else if(breakdownMode==='custom'){ items = data.custom; titleEl.textContent = 'Pos Tambahan'; }
+  else { items = [...data.wajib, ...data.custom]; titleEl.textContent = 'Semua Pos'; }
+
+  let rows = items.map(i=>({name:i.name, spent:itemSpent(i)}))
+    .filter(r=>r.spent>0)
+    .sort((a,b)=>b.spent-a.spent)
+    .slice(0,8);
+
+  if(rows.length===0){
+    wrap.innerHTML = '<div class="chart-empty">Belum ada pengeluaran tercatat di kategori ini bulan ini.</div>';
+    return;
+  }
+
+  const maxVal = Math.max(...rows.map(r=>r.spent));
+  const rowH = 30;
+  const W = 320;
+  const Hc = rows.length*rowH + 8;
+  const labelW = 108;
+  const barMaxW = W - labelW - 54;
+
+  let content = '';
+  rows.forEach((r,i)=>{
+    const y = i*rowH + 6;
+    const bw = Math.max(3, (r.spent/maxVal)*barMaxW);
+    const name = r.name.length>16 ? r.name.slice(0,15)+'…' : r.name;
+    content += `
+      <text x="0" y="${y+13}" font-size="10.5" fill="var(--text)">${escapeHtml(name)}</text>
+      <rect x="${labelW}" y="${y+3}" width="${bw}" height="16" rx="4" fill="var(--accent)"><title>${escapeHtml(r.name)}: ${formatRp(r.spent)}</title></rect>
+      <text x="${labelW+bw+6}" y="${y+15}" font-size="9.5" fill="var(--accent2)">${formatRpShort(r.spent)}</text>
+    `;
+  });
+
+  const svg = `<svg viewBox="0 0 ${W} ${Hc}" width="100%" style="display:block;">${content}</svg>`;
+  wrap.innerHTML = svg;
 }
 
 /* === ACTIONS === */
