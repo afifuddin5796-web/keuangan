@@ -163,6 +163,17 @@
   .hist-status.surplus{background:rgba(52,211,153,.15); color:var(--good);}
   .hist-status.deficit{background:rgba(251,113,133,.15); color:var(--danger);}
   .hist-catatan{font-size:11.5px; color:var(--sub); margin-top:8px; line-height:1.5; font-style:italic;}
+  .hist-toggle{margin-top:10px; text-align:center; font-size:12px; color:var(--accent); border:1px dashed var(--line); border-radius:10px; padding:8px; cursor:pointer;}
+  .hist-detail{display:none; margin-top:10px; padding-top:10px; border-top:1px solid var(--line);}
+  .hist-detail.show{display:block;}
+  .hist-detail-group{margin-bottom:10px;}
+  .hist-detail-title{font-size:11px; color:var(--sub); font-weight:700; text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px;}
+  .hist-pos-block{background:var(--card2); border-radius:10px; padding:8px 10px; margin-bottom:6px;}
+  .hist-pos-head{display:flex; justify-content:space-between; font-size:12.5px; font-weight:700;}
+  .hist-pos-logs{margin-top:6px; padding-top:6px; border-top:1px solid var(--line);}
+  .hist-log-row{display:flex; justify-content:space-between; font-size:11.5px; color:var(--sub); padding:2px 0;}
+  .hist-log-row span:first-child{flex:1; padding-right:8px;}
+  .hist-no-log{font-size:11px; color:var(--sub); font-style:italic;}
 
   /* LOG */
   .log-list{margin-top:10px; padding-top:10px; border-top:1px solid var(--line);}
@@ -271,7 +282,7 @@
   </div>
 </header>
 
-<!-- PAGE: BULAN INI -->
+<!-- PAGE: RINGKASAN -->
 <div class="page active" id="pageNow">
 
   <div class="summary">
@@ -948,8 +959,7 @@ function renderGrafik(){
 
 function renderTrendChart(){
   const wrap = document.getElementById('trendChartWrap');
-  // Ambil sampai 5 history terlama->terbaru + bulan berjalan (belum ditutup)
-  const histAsc = [...data.history].slice(0,5).reverse(); // history[0] = terbaru, ambil 5 terbaru lalu balik urutan jadi lama->baru
+  const histAsc = [...data.history].slice(0,5).reverse();
   const t = calcTotals();
   const points = histAsc.map(r=>({
     label: r.label,
@@ -1166,7 +1176,8 @@ function resetBulan(){
     doneWajib,
     totalWajib:data.wajib.length,
     incomeDetail:data.income.map(i=>({name:i.name,amount:i.amount})),
-    wajibDetail:data.wajib.map(i=>({name:i.name,alokasi:i.amount,terpakai:logTotal(i)!==null?logTotal(i):(i.done?i.amount:0)}))
+    wajibDetail:data.wajib.map(i=>({name:i.name,alokasi:i.amount,terpakai:logTotal(i)!==null?logTotal(i):(i.done?i.amount:0),logs:(i.logs||[]).map(l=>({note:l.note,amount:l.amount,time:l.time}))})),
+    customDetail:data.custom.map(i=>({name:i.name,alokasi:i.amount,terpakai:logTotal(i)!==null?logTotal(i):(i.done?i.amount:0),logs:(i.logs||[]).map(l=>({note:l.note,amount:l.amount,time:l.time}))}))
   });
 
   data.wajib.forEach(i=>{i.done=false;i.logs=[];});
@@ -1197,6 +1208,34 @@ function resetBulan(){
 }
 
 /* === HISTORY === */
+function toggleHistDetail(id){
+  const el = document.getElementById('histDetail-'+id);
+  const btn = document.getElementById('histToggleBtn-'+id);
+  if(!el) return;
+  const showing = el.classList.toggle('show');
+  btn.textContent = showing ? '▲ Sembunyikan rincian' : '▾ Lihat rincian transaksi';
+}
+
+function renderPosBlock(pos){
+  const over = pos.terpakai > pos.alokasi;
+  let logsHtml = '';
+  if(pos.logs && pos.logs.length>0){
+    logsHtml = '<div class="hist-pos-logs">' + pos.logs.map(l=>{
+      const d = l.time ? new Date(l.time).toLocaleDateString('id-ID',{day:'numeric',month:'short'}) : '';
+      return `<div class="hist-log-row"><span>${escapeHtml(l.note||'(tanpa catatan)')} ${d?'· '+d:''}</span><span>${formatRp(l.amount)}</span></div>`;
+    }).join('') + '</div>';
+  } else {
+    logsHtml = '<div class="hist-pos-logs"><div class="hist-no-log">Tidak ada rincian transaksi tersimpan untuk pos ini.</div></div>';
+  }
+  return `<div class="hist-pos-block">
+    <div class="hist-pos-head">
+      <span style="${over?'color:var(--danger)':''}">${escapeHtml(pos.name)}</span>
+      <b style="${over?'color:var(--danger)':''}">${formatRp(pos.terpakai)} / ${formatRp(pos.alokasi)}</b>
+    </div>
+    ${logsHtml}
+  </div>`;
+}
+
 function renderHistory(){
   const wrap = document.getElementById('histList');
   if(data.history.length===0){
@@ -1210,24 +1249,34 @@ function renderHistory(){
     const sc=rec.sisa>=0?'surplus':'deficit';
     const st=rec.sisa>=0?'✓ Surplus':'⚠ Defisit';
 
-    let detailRows='';
-    if(rec.wajibDetail&&rec.wajibDetail.length>0){
-      detailRows=`<div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--line);">
-        <div style="font-size:11px;color:var(--sub);font-weight:700;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px;">Detail Per Pos</div>`;
-      rec.wajibDetail.forEach(d=>{
-        const over=d.terpakai>d.alokasi;
-        detailRows+=`<div class="hist-row">
-          <span style="${over?'color:var(--danger)':''}">${escapeHtml(d.name)}</span>
-          <b style="${over?'color:var(--danger)':''}">${formatRp(d.terpakai)}</b>
-        </div>`;
-      });
-      detailRows+=`</div>`;
-    }
-
     const carryHtml = rec.carryOver>0
       ? `<div class="hist-row"><span>💙 Sisa bulan lalu dipakai</span><b>${formatRp(rec.carryOver)}</b></div>`:'';
     const sisaHtml = rec.sisaBersih>0
       ? `<div class="hist-row"><span>✨ Sisa terbawa ke bulan depan</span><b style="color:var(--good)">${formatRp(rec.sisaBersih)}</b></div>`:'';
+
+    // --- rincian detail (income + wajib + custom, dengan log transaksi kalau ada) ---
+    let detailInner = '';
+    if(rec.incomeDetail && rec.incomeDetail.length>0){
+      detailInner += `<div class="hist-detail-group">
+        <div class="hist-detail-title">Rincian Pemasukan Tambahan</div>
+        ${rec.incomeDetail.map(inc=>`<div class="hist-pos-block"><div class="hist-pos-head"><span>${escapeHtml(inc.name)}</span><b style="color:var(--plus)">+${formatRp(inc.amount)}</b></div></div>`).join('')}
+      </div>`;
+    }
+    if(rec.wajibDetail && rec.wajibDetail.length>0){
+      detailInner += `<div class="hist-detail-group">
+        <div class="hist-detail-title">Rincian Pos Wajib</div>
+        ${rec.wajibDetail.map(renderPosBlock).join('')}
+      </div>`;
+    }
+    if(rec.customDetail && rec.customDetail.length>0){
+      detailInner += `<div class="hist-detail-group">
+        <div class="hist-detail-title">Rincian Pos Tambahan</div>
+        ${rec.customDetail.map(renderPosBlock).join('')}
+      </div>`;
+    }
+    if(!detailInner){
+      detailInner = '<div class="hist-no-log">Rincian detail tidak tersimpan untuk bulan ini (bulan ditutup sebelum fitur ini ada).</div>';
+    }
 
     div.innerHTML=`
       <div class="hist-head">
@@ -1242,10 +1291,12 @@ function renderHistory(){
       <div class="hist-row"><span>Sisa</span><b style="color:${rec.sisa>=0?'var(--good)':'var(--danger)'}">${formatRp(rec.sisa)}</b></div>
       ${sisaHtml}
       <div class="hist-row"><span>Pos wajib selesai</span><b>${rec.doneWajib}/${rec.totalWajib}</b></div>
-      ${detailRows}
       <div class="hist-status ${sc}">${st}</div>
+      <div class="hist-toggle" id="histToggleBtn-${rec.id}">▾ Lihat rincian transaksi</div>
+      <div class="hist-detail" id="histDetail-${rec.id}">${detailInner}</div>
     `;
     div.querySelector('.hist-del').onclick=()=>deleteHistory(rec.id);
+    div.querySelector('#histToggleBtn-'+rec.id).onclick=()=>toggleHistDetail(rec.id);
     wrap.appendChild(div);
   });
 }
@@ -1263,8 +1314,6 @@ if ('serviceWorker' in navigator) {
       .catch(err => console.error('Gagal mendaftar Service Worker:', err));
   });
 }
-// Minta browser untuk tidak sembarangan menghapus cache/data app ini
-// saat storage HP penuh — supaya mode offline lebih awet.
 if (navigator.storage && navigator.storage.persist) {
   navigator.storage.persist().catch(() => {});
 }
