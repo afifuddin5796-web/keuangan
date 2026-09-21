@@ -1,6 +1,6 @@
 // Versi cache dinaikkan supaya browser mau menimpa Service Worker lama
 // yang sudah kadung ter-install di HP kamu dengan versi yang sudah diperbaiki.
-const CACHE_NAME = 'anggaran-app-v6';
+const CACHE_NAME = 'anggaran-app-v7';
 const OFFLINE_URL = './index.html';
 
 const ASSETS_TO_CACHE = [
