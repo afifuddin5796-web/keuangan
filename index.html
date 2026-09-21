@@ -1256,27 +1256,30 @@ function renderHistory(){
 
     // --- rincian detail (income + wajib + custom, dengan log transaksi kalau ada) ---
     let detailInner = '';
-    if(rec.incomeDetail && rec.incomeDetail.length>0){
-      detailInner += `<div class="hist-detail-group">
-        <div class="hist-detail-title">Rincian Pemasukan Tambahan</div>
-        ${rec.incomeDetail.map(inc=>`<div class="hist-pos-block"><div class="hist-pos-head"><span>${escapeHtml(inc.name)}</span><b style="color:var(--plus)">+${formatRp(inc.amount)}</b></div></div>`).join('')}
-      </div>`;
-    }
-    if(rec.wajibDetail && rec.wajibDetail.length>0){
-      detailInner += `<div class="hist-detail-group">
-        <div class="hist-detail-title">Rincian Pos Wajib</div>
-        ${rec.wajibDetail.map(renderPosBlock).join('')}
-      </div>`;
-    }
-    if(rec.customDetail && rec.customDetail.length>0){
-      detailInner += `<div class="hist-detail-group">
-        <div class="hist-detail-title">Rincian Pos Tambahan</div>
-        ${rec.customDetail.map(renderPosBlock).join('')}
-      </div>`;
-    }
-    if(!detailInner){
-      detailInner = '<div class="hist-no-log">Rincian detail tidak tersimpan untuk bulan ini (bulan ditutup sebelum fitur ini ada).</div>';
-    }
+
+    detailInner += `<div class="hist-detail-group">
+      <div class="hist-detail-title">Rincian Pemasukan Tambahan</div>
+      ${ (rec.incomeDetail && rec.incomeDetail.length>0)
+          ? rec.incomeDetail.map(inc=>`<div class="hist-pos-block"><div class="hist-pos-head"><span>${escapeHtml(inc.name)}</span><b style="color:var(--plus)">+${formatRp(inc.amount)}</b></div></div>`).join('')
+          : (rec.incomeDetail ? '<div class="hist-no-log">Tidak ada pemasukan tambahan bulan ini.</div>' : '<div class="hist-no-log">Rincian tidak tersimpan (bulan ditutup sebelum fitur ini ada).</div>')
+      }
+    </div>`;
+
+    detailInner += `<div class="hist-detail-group">
+      <div class="hist-detail-title">Rincian Pos Wajib</div>
+      ${ (rec.wajibDetail && rec.wajibDetail.length>0)
+          ? rec.wajibDetail.map(renderPosBlock).join('')
+          : '<div class="hist-no-log">Rincian tidak tersimpan (bulan ditutup sebelum fitur ini ada).</div>'
+      }
+    </div>`;
+
+    detailInner += `<div class="hist-detail-group">
+      <div class="hist-detail-title">Rincian Pos Tambahan / Pengeluaran Lain</div>
+      ${ rec.customDetail
+          ? (rec.customDetail.length>0 ? rec.customDetail.map(renderPosBlock).join('') : '<div class="hist-no-log">Tidak ada pos tambahan bulan ini.</div>')
+          : '<div class="hist-no-log">Belum tercatat untuk bulan ini \u2014 fitur simpan pos tambahan ke History baru ditambahkan belakangan. Mulai bulan yang ditutup setelah pembaruan ini, datanya akan ikut tersimpan.</div>'
+      }
+    </div>`;
 
     div.innerHTML=`
       <div class="hist-head">
